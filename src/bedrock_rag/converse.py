@@ -1,6 +1,49 @@
 """Validation helpers for simulated Amazon Bedrock Converse responses."""
 
 
+_FAQ_EXTRACTION_SYSTEM_PROMPT = (
+    "Extract frequently asked questions and their answers "
+    "from the provided document. "
+    "Return only a valid JSON object with a 'records' array. "
+    "Each record must contain exactly these string fields: "
+    "'question', 'answer', and 'category'. "
+    "Do not include a 'source' field or any additional fields. "
+    "Do not include Markdown fences or explanatory text. "
+    'If no FAQs can be extracted, return {"records": []}.'
+)
+
+
+def build_converse_request(
+    document_text: str,
+    model_id: str = "amazon.nova-micro-v1:0",
+) -> dict:
+    """Build arguments for a future Bedrock Converse call without side effects."""
+    if not isinstance(document_text, str):
+        raise TypeError("document_text must be a string")
+    if not document_text.strip():
+        raise ValueError("document_text must not be blank")
+
+    if not isinstance(model_id, str):
+        raise TypeError("model_id must be a string")
+    if not model_id.strip():
+        raise ValueError("model_id must not be blank")
+
+    return {
+        "modelId": model_id,
+        "system": [{"text": _FAQ_EXTRACTION_SYSTEM_PROMPT}],
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"text": document_text}],
+            }
+        ],
+        "inferenceConfig": {
+            "temperature": 0,
+            "maxTokens": 1024,
+        },
+    }
+
+
 class ConverseResponseError(Exception):
     """Raised when a Converse response violates the adapter contract."""
 
