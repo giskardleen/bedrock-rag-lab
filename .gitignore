@@ -1,0 +1,47 @@
+# Credentials and local environment
+.env
+.env.*
+!.env.example
+credentials
+*.pem
+*.key
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Generated results and logs
+results/
+outputs/
+*.log
+logs/
+
+# Local tool caches
+.cache/
+.uv-cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Internal development contract
+/BEDROCK_RAG_LAB_DEVELOPMENT_CONTRACT.md
+
+# External reference material (local only)
+/_reference/
+
+# Python package build metadata
+*.egg-info/
+build/
+dist/
+
+# macOS metadata
+.DS_Store
