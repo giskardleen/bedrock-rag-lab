@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib
+import json
 from pathlib import Path
 from typing import Any, Sequence
+
+from pydantic import ValidationError
 
 from bedrock_rag.converse import (
     build_converse_request,
@@ -136,9 +139,20 @@ def _run_live(boto3_module: Any, config_class: Any, document_text: str) -> int:
     print("response_extraction_succeeded=true")
     try:
         extraction = parse_faq_extraction(text, source=SOURCE)
+    except json.JSONDecodeError:
+        print("schema_validation_succeeded=false")
+        print("failure_stage=schema_validation")
+        print("failure_detail=invalid_json")
+        return 1
+    except ValidationError:
+        print("schema_validation_succeeded=false")
+        print("failure_stage=schema_validation")
+        print("failure_detail=schema_incompatible")
+        return 1
     except Exception:
         print("schema_validation_succeeded=false")
         print("failure_stage=schema_validation")
+        print("failure_detail=unexpected_parser_error")
         return 1
 
     print("schema_validation_succeeded=true")

@@ -205,6 +205,7 @@ def test_mocked_success_prints_only_sanitized_evidence(
         "schema_validation_succeeded=true\n"
         "faq_entries_extracted=2\n"
     )
+    assert "failure_detail=" not in output
     assert response["output"]["message"]["content"][0]["text"] not in output
     assert "A programming language." not in output
 
@@ -352,18 +353,21 @@ def test_authorization_failure_is_classified_without_disclosure(
 
 
 @pytest.mark.parametrize(
-    "payload",
+    ("payload", "expected_detail"),
     [
-        "SECRET invalid JSON {",
-        json.dumps(
-            {
-                "records": [
-                    {
-                        "answer": "SECRET schema payload",
-                        "category": "general",
-                    }
-                ]
-            }
+        ("SECRET invalid JSON {", "invalid_json"),
+        (
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "answer": "SECRET schema payload",
+                            "category": "general",
+                        }
+                    ]
+                }
+            ),
+            "schema_incompatible",
         ),
     ],
 )
@@ -372,6 +376,7 @@ def test_model_payload_failures_are_sanitized_schema_failures(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     payload: str,
+    expected_detail: str,
 ) -> None:
     response = _successful_response()
     response["output"]["message"]["content"] = [{"text": payload}]
@@ -382,6 +387,8 @@ def test_model_payload_failures_are_sanitized_schema_failures(
     assert "response_extraction_succeeded=true\n" in output
     assert "schema_validation_succeeded=false\n" in output
     assert "failure_stage=schema_validation\n" in output
+    assert f"failure_detail={expected_detail}\n" in output
+    assert output.count("failure_detail=") == 1
     assert "SECRET" not in output
     assert payload not in output
 
@@ -459,4 +466,6 @@ def test_unexpected_parsing_exception_is_sanitized(
     assert "response_extraction_succeeded=true\n" in output
     assert "schema_validation_succeeded=false\n" in output
     assert "failure_stage=schema_validation\n" in output
+    assert "failure_detail=unexpected_parser_error\n" in output
+    assert output.count("failure_detail=") == 1
     assert "SECRET" not in output
