@@ -15,6 +15,9 @@ dependencies = [
 dev = [
     "pytest>=8,<10",
 ]
+live = [
+    "boto3~=1.43.118",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
