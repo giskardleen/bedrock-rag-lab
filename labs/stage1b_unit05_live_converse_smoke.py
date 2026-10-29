@@ -12,7 +12,9 @@ from typing import Any, Sequence
 from pydantic import ValidationError
 
 from bedrock_rag.converse import (
+    CLAUDE_HAIKU_45_INFERENCE_PROFILE,
     build_converse_request,
+    build_structured_converse_request,
     extract_converse_text,
 )
 from bedrock_rag.parsing import parse_faq_extraction
@@ -21,6 +23,7 @@ from bedrock_rag.transport import invoke_converse
 
 REGION = "us-east-1"
 MODEL_ID = "amazon.nova-lite-v1:0"
+STRUCTURED_MODEL_ID = CLAUDE_HAIKU_45_INFERENCE_PROFILE
 FIXTURE_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "python_general_faq_excerpt.txt"
 )
@@ -89,7 +92,13 @@ def _classify_sdk_failure(error: Exception) -> str:
     return "transport"
 
 
-def _run_live(boto3_module: Any, config_class: Any, document_text: str) -> int:
+def _run_live(
+    boto3_module: Any,
+    config_class: Any,
+    document_text: str,
+    *,
+    structured_output: bool = False,
+) -> int:
     try:
         config = config_class(
             retries={"total_max_attempts": 1, "mode": "standard"}
@@ -105,7 +114,13 @@ def _run_live(boto3_module: Any, config_class: Any, document_text: str) -> int:
         return 1
 
     try:
-        request = build_converse_request(document_text, model_id=MODEL_ID)
+        if structured_output:
+            request = build_structured_converse_request(
+                document_text,
+                model_id=STRUCTURED_MODEL_ID,
+            )
+        else:
+            request = build_converse_request(document_text, model_id=MODEL_ID)
     except Exception:
         print("invocation_attempted=false")
         print("failure_stage=request_construction")
@@ -167,6 +182,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="explicitly permit one live Amazon Bedrock Converse request",
     )
+    parser.add_argument(
+        "--structured-output",
+        action="store_true",
+        help="use Claude Haiku 4.5 with JSON Schema structured output",
+    )
     args = parser.parse_args(argv)
 
     if not args.execute_live:
@@ -189,7 +209,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("failure_stage=live_dependency")
         return 1
 
-    return _run_live(boto3_module, config_module.Config, document_text)
+    return _run_live(
+        boto3_module,
+        config_module.Config,
+        document_text,
+        structured_output=args.structured_output,
+    )
 
 
 if __name__ == "__main__":

@@ -1,8 +1,14 @@
 """Offline tests for the Bedrock Converse request builder."""
 
+import json
+
 import pytest
 
-from bedrock_rag.converse import build_converse_request
+from bedrock_rag.converse import (
+    CLAUDE_HAIKU_45_INFERENCE_PROFILE,
+    build_converse_request,
+    build_structured_converse_request,
+)
 
 
 EXPECTED_SYSTEM_PROMPT = (
@@ -136,3 +142,77 @@ def test_r11_returns_independent_request_dictionaries() -> None:
     assert second["system"] == [{"text": EXPECTED_SYSTEM_PROMPT}]
     assert second["messages"][0]["content"][0]["text"] == "Document content"
     assert second["inferenceConfig"]["maxTokens"] == 1024
+
+
+def test_structured_request_uses_claude_profile_and_output_config() -> None:
+    request = build_structured_converse_request("Document content")
+
+    assert request["modelId"] == CLAUDE_HAIKU_45_INFERENCE_PROFILE
+    assert request["inferenceConfig"] == {"temperature": 0, "maxTokens": 1024}
+    assert request["messages"] == [
+        {
+            "role": "user",
+            "content": [{"text": "Document content"}],
+        }
+    ]
+    assert request["outputConfig"]["textFormat"]["type"] == "json_schema"
+
+
+def test_structured_request_schema_matches_raw_parser_contract() -> None:
+    request = build_structured_converse_request("Document content")
+    schema_text = request["outputConfig"]["textFormat"]["structure"][
+        "jsonSchema"
+    ]["schema"]
+
+    assert isinstance(schema_text, str)
+    schema = json.loads(schema_text)
+    assert schema == {
+        "type": "object",
+        "properties": {
+            "records": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "question": {"type": "string"},
+                        "answer": {"type": "string"},
+                        "category": {"type": "string"},
+                    },
+                    "required": ["question", "answer", "category"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["records"],
+        "additionalProperties": False,
+    }
+    assert "source" not in schema_text
+    assert "minLength" not in schema_text
+
+
+def test_structured_prompt_defers_format_and_provenance_to_contracts() -> None:
+    request = build_structured_converse_request("Document content")
+    prompt = request["system"][0]["text"]
+
+    assert "question, answer, and category" in prompt
+    assert "application assigns" in prompt
+    assert "JSON" not in prompt
+    assert "Markdown" not in prompt
+
+
+def test_structured_request_accepts_custom_model_and_returns_independent_data() -> None:
+    first = build_structured_converse_request(
+        "Document content",
+        model_id="profile.custom-v1",
+    )
+    second = build_structured_converse_request("Document content")
+
+    first["outputConfig"]["textFormat"]["structure"]["jsonSchema"]["schema"] = "{}"
+
+    assert first["modelId"] == "profile.custom-v1"
+    assert second["modelId"] == CLAUDE_HAIKU_45_INFERENCE_PROFILE
+    assert json.loads(
+        second["outputConfig"]["textFormat"]["structure"]["jsonSchema"][
+            "schema"
+        ]
+    )["required"] == ["records"]

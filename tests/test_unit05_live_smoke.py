@@ -94,10 +94,12 @@ def _install_fake_sdk(monkeypatch: pytest.MonkeyPatch, module: Any, client: Any)
     return fake_boto3
 
 
+@pytest.mark.parametrize("argv", [[], ["--structured-output"]])
 def test_without_opt_in_stops_before_boto_import_or_client_creation(
     smoke_module: Any,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    argv: list[str],
 ) -> None:
     def forbidden_import(name: str) -> Any:
         if name in {"boto3", "botocore.config"}:
@@ -106,7 +108,7 @@ def test_without_opt_in_stops_before_boto_import_or_client_creation(
 
     monkeypatch.setattr(smoke_module.importlib, "import_module", forbidden_import)
 
-    assert smoke_module.main([]) == 0
+    assert smoke_module.main(argv) == 0
     assert capsys.readouterr().out == (
         "invocation_attempted=false\nlive_execution_enabled=false\n"
     )
@@ -182,6 +184,49 @@ def test_model_region_retries_and_existing_pipeline_are_used(
         {"retries": {"total_max_attempts": 1, "mode": "standard"}}
     ]
     assert len(client.calls) == 1
+    assert "outputConfig" not in client.calls[0]
+
+
+def test_structured_path_uses_claude_profile_schema_and_application_source(
+    smoke_module: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeConfig.calls.clear()
+    client = FakeClient(_successful_response())
+    fake_boto3 = _install_fake_sdk(monkeypatch, smoke_module, client)
+    parser_sources: list[str] = []
+    original_parser = smoke_module.parse_faq_extraction
+
+    monkeypatch.setattr(
+        smoke_module,
+        "build_converse_request",
+        lambda *args, **kwargs: pytest.fail("Nova builder used for structured path"),
+    )
+
+    def parser(payload: str, *, source: str) -> Any:
+        parser_sources.append(source)
+        return original_parser(payload, source=source)
+
+    monkeypatch.setattr(smoke_module, "parse_faq_extraction", parser)
+
+    assert smoke_module.main(["--execute-live", "--structured-output"]) == 0
+    assert fake_boto3.calls[0][0] == "bedrock-runtime"
+    assert fake_boto3.calls[0][1]["region_name"] == "us-east-1"
+    assert FakeConfig.calls == [
+        {"retries": {"total_max_attempts": 1, "mode": "standard"}}
+    ]
+    assert len(client.calls) == 1
+
+    request = client.calls[0]
+    assert request["modelId"] == (
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    )
+    schema_text = request["outputConfig"]["textFormat"]["structure"][
+        "jsonSchema"
+    ]["schema"]
+    assert request["outputConfig"]["textFormat"]["type"] == "json_schema"
+    assert "source" not in schema_text
+    assert parser_sources == ["https://docs.python.org/3.11/faq/general.html"]
 
 
 def test_mocked_success_prints_only_sanitized_evidence(
@@ -391,6 +436,27 @@ def test_model_payload_failures_are_sanitized_schema_failures(
     assert output.count("failure_detail=") == 1
     assert "SECRET" not in output
     assert payload not in output
+
+
+def test_structured_path_parser_failure_remains_sanitized(
+    smoke_module: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    response = _successful_response()
+    sensitive_payload = "SECRET structured payload {"
+    response["output"]["message"]["content"] = [{"text": sensitive_payload}]
+    client = FakeClient(response)
+    _install_fake_sdk(monkeypatch, smoke_module, client)
+
+    assert smoke_module.main(["--execute-live", "--structured-output"]) == 1
+    output = capsys.readouterr().out
+    assert len(client.calls) == 1
+    assert "schema_validation_succeeded=false\n" in output
+    assert "failure_stage=schema_validation\n" in output
+    assert "failure_detail=invalid_json\n" in output
+    assert sensitive_payload not in output
+    assert "SECRET" not in output
 
 
 def test_unexpected_request_construction_exception_is_sanitized(
