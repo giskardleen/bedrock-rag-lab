@@ -93,6 +93,20 @@ The Unit 04 transport suite contributes four passing tests covering request forw
 
 These tests validate the implemented offline contracts. They do not establish model availability, AWS permissions, live API compatibility, retrieval behavior, or semantic extraction quality.
 
+## Development Costs
+
+This project documents the estimated AWS costs associated with its development experiments, including model inference, token consumption, and the cost implications of architectural decisions.
+
+| Experiment | Invocations | Estimated cost |
+|---|---:|---:|
+| Amazon Nova Lite — Unit 05 | 2 | $0.00018096 |
+| Claude Haiku 4.5 — Unit 05 | 1 | $0.00198330 |
+| **Total recorded** | **3** | **$0.00216426** |
+
+*Costs are estimated from observed usage and reference pricing. They are not verified AWS charges and do not necessarily represent all AWS resources consumed during development.*
+
+For the complete methodology, token measurements, pricing assumptions, calculations, and future unit cost records, see **[Development Costs — Full Technical Breakdown](docs/development-costs.md)**.
+
 ## Technology
 
 **Currently used**
